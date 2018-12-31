@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 type (
@@ -22,7 +23,7 @@ type (
 		Depth int
 		FileName string
 		CurrentLine string
-		ParentLine string
+		ParentLine []string
 	}
 
 	Result struct {
@@ -33,27 +34,28 @@ type (
 	visitor struct {}
 )
 
-func (v visitor) Visit(n Node) Visitor {
-	if n != (Node{}) {
-		if n.IsHiddenFile() {
-			return nil
-		}
+const (
+	ThreeWayLine = "├── "
+	RightAngleLine = "└── "
+)
 
-		switch n.Type() {
-		case "dir":
-			fmt.Println(n.ParentLine + n.CurrentLine + filepath.Base(n.FileName))
-		case "file":
-			fmt.Println(n.ParentLine + n.CurrentLine + filepath.Base(n.FileName))
-		}
+func (v visitor) Visit(n Node) Visitor {
+	if n.IsHiddenFile() {
+		return nil
+	}
+
+	switch n.Type() {
+	case "dir":
+		// TODO: coloring print
+		fmt.Println(n.CurrentLine + filepath.Base(n.FileName))
+	case "file":
+		// TODO: coloring print
+		fmt.Println(n.CurrentLine + filepath.Base(n.FileName))
 	}
 	return v
 }
 
 func Walk(v Visitor, n Node, r Result) Result {
-	if n == (Node{}) {
-		return r
-	}
-
 	if v = v.Visit(n); v == nil {
 		return r
 	}
@@ -79,43 +81,40 @@ func WalkDir(v Visitor, n Node, r Result) Result {
 
 	lastIndex := len(files) - 1
 	for i, file := range files {
-		var nextNode Node
-		if i != lastIndex {
-			var parentLine string
-			if n.Depth == 0 {
-				parentLine = ""
-			} else {
-				parentLine = "│   "
-			}
-
-			nextNode = Node{
-				Pos: Pos{
-					Depth: n.Depth + 1,
-					FileName: filepath.Join(n.FileName, file.Name()),
-					ParentLine: n.ParentLine + parentLine,
-					CurrentLine: "├── ",
-				},
-			}
-		} else {
-			var parentLine string
-			if n.Depth == 0 {
-				parentLine = ""
-			} else {
-				parentLine = "│   "
-			}
-			nextNode = Node{
-				Pos: Pos{
-					Depth: n.Depth + 1,
-					FileName: filepath.Join(n.FileName, file.Name()),
-					ParentLine: n.ParentLine + parentLine,
-					CurrentLine: "└── ",
-				},
-			}
-		}
+		nextNode := n.NextNode(i, lastIndex, file.Name())
 		r = Walk(v, nextNode, r)
 	}
 
 	return r
+}
+
+func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
+	var parentLine []string
+	currentLine := strings.Join(n.ParentLine, "")
+	if currentIndex != lastIndex {
+		if n.Depth != 0 {
+			parentLine = append(n.ParentLine, "    │")
+			currentLine = currentLine + "    " + ThreeWayLine
+		} else {
+			currentLine = ThreeWayLine
+		}
+	} else {
+		if n.Depth != 0 {
+			parentLine = append(n.ParentLine, "    ")
+			currentLine = currentLine + "    " + RightAngleLine
+		} else {
+			currentLine = RightAngleLine
+		}
+	}
+
+	return Node{
+		Pos{
+			Depth: n.Depth + 1,
+			FileName: filepath.Join(n.FileName, fileName),
+			ParentLine: parentLine,
+			CurrentLine: currentLine,
+		},
+	}
 }
 
 func (n Node) Type() string {
@@ -157,7 +156,7 @@ func TreeCommand(c *cli.Context) error {
 		Pos {
 			Depth: 0,
 			FileName: rootDir,
-			ParentLine: "",
+			ParentLine: []string{},
 		},
 	}
 
