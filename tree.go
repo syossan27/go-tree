@@ -2,11 +2,12 @@ package go_tree
 
 import (
 	"fmt"
-	"github.com/urfave/cli"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/urfave/cli"
 )
 
 type (
@@ -16,21 +17,22 @@ type (
 
 	Node struct {
 		Pos
+		HasNext bool
 	}
 
 	Pos struct {
-		Depth int
-		FileName string
+		Depth       int
+		FileName    string
 		CurrentLine string
-		ParentLine string
+		ParentLine  string
 	}
 
 	Result struct {
-		DirNum int64
+		DirNum  int64
 		FileNum int64
 	}
 
-	visitor struct {}
+	visitor struct{}
 )
 
 func (v visitor) Visit(n Node) Visitor {
@@ -39,12 +41,7 @@ func (v visitor) Visit(n Node) Visitor {
 			return nil
 		}
 
-		switch n.Type() {
-		case "dir":
-			fmt.Println(n.ParentLine + n.CurrentLine + filepath.Base(n.FileName))
-		case "file":
-			fmt.Println(n.ParentLine + n.CurrentLine + filepath.Base(n.FileName))
-		}
+		fmt.Println(n.ParentLine + n.CurrentLine + filepath.Base(n.FileName))
 	}
 	return v
 }
@@ -79,37 +76,37 @@ func WalkDir(v Visitor, n Node, r Result) Result {
 
 	lastIndex := len(files) - 1
 	for i, file := range files {
+
+		var parentLine string
+
+		if n.Depth != 0 {
+			if n.HasNext {
+				parentLine = "│   "
+			} else {
+				parentLine = "    "
+			}
+		}
+
 		var nextNode Node
 		if i != lastIndex {
-			var parentLine string
-			if n.Depth == 0 {
-				parentLine = ""
-			} else {
-				parentLine = "│   "
-			}
-
 			nextNode = Node{
 				Pos: Pos{
-					Depth: n.Depth + 1,
-					FileName: filepath.Join(n.FileName, file.Name()),
-					ParentLine: n.ParentLine + parentLine,
+					Depth:       n.Depth + 1,
+					FileName:    filepath.Join(n.FileName, file.Name()),
+					ParentLine:  n.ParentLine + parentLine,
 					CurrentLine: "├── ",
 				},
+				HasNext: true,
 			}
 		} else {
-			var parentLine string
-			if n.Depth == 0 {
-				parentLine = ""
-			} else {
-				parentLine = "│   "
-			}
 			nextNode = Node{
 				Pos: Pos{
-					Depth: n.Depth + 1,
-					FileName: filepath.Join(n.FileName, file.Name()),
-					ParentLine: n.ParentLine + parentLine,
+					Depth:       n.Depth + 1,
+					FileName:    filepath.Join(n.FileName, file.Name()),
+					ParentLine:  n.ParentLine + parentLine,
 					CurrentLine: "└── ",
 				},
+				HasNext: false,
 			}
 		}
 		r = Walk(v, nextNode, r)
@@ -136,11 +133,7 @@ func (n Node) IsHiddenFile() bool {
 	// https://grokbase.com/t/gg/golang-nuts/144va1n8w5/go-nuts-how-do-check-if-file-or-directory-is-hidden-under-windows
 	if runtime.GOOS != "windows" {
 		baseFileName := filepath.Base(n.FileName)
-		if baseFileName[0:1] == "." {
-			return true
-		} else {
-			return false
-		}
+		return filepath.HasPrefix(baseFileName, ".")
 	}
 
 	return false
@@ -154,11 +147,12 @@ func TreeCommand(c *cli.Context) error {
 	v := visitor{}
 	r := Result{}
 	n := Node{
-		Pos {
-			Depth: 0,
-			FileName: rootDir,
+		Pos: Pos{
+			Depth:      0,
+			FileName:   rootDir,
 			ParentLine: "",
 		},
+		HasNext: false,
 	}
 
 	r = WalkDir(v, n, r)
