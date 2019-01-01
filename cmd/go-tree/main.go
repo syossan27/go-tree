@@ -14,6 +14,12 @@ func makeApp() *cli.App {
 	app.Usage = "Re-implemented tree command"
 	app.Version = "0.1.1"
 	app.Action = go_tree.TreeCommand
+	app.Flags = []cli.Flag {
+		cli.IntFlag{
+			Name: "L",
+			Usage: "Descend only level directories deep.",
+		},
+	}
 	return app
 }
 

@@ -20,10 +20,10 @@ type (
 	}
 
 	Pos struct {
-		Depth int
-		FileName string
+		Level       int
+		FileName    string
 		CurrentLine string
-		ParentLine []string
+		ParentLine  []string
 	}
 
 	Result struct {
@@ -57,14 +57,18 @@ func (v visitor) Visit(n Node) Visitor {
 	return v
 }
 
-func Walk(v Visitor, n Node, r Result) Result {
+func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
+	if n.Level > c.Int("L") {
+		return r
+	}
+
 	if v = v.Visit(n); v == nil {
 		return r
 	}
 
 	switch n.Type() {
 	case "dir":
-		r = WalkDir(v, n, r)
+		r = WalkDir(c, v, n, r)
 		r.DirNum++
 		return r
 	case "file":
@@ -75,7 +79,7 @@ func Walk(v Visitor, n Node, r Result) Result {
 	return r
 }
 
-func WalkDir(v Visitor, n Node, r Result) Result {
+func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
 	files, err := ioutil.ReadDir(n.FileName)
 	if err != nil {
 		panic(err)
@@ -84,7 +88,7 @@ func WalkDir(v Visitor, n Node, r Result) Result {
 	lastIndex := len(files) - 1
 	for i, file := range files {
 		nextNode := n.NextNode(i, lastIndex, file.Name())
-		r = Walk(v, nextNode, r)
+		r = Walk(c, v, nextNode, r)
 	}
 
 	return r
@@ -95,14 +99,14 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 	currentLine := strings.Join(n.ParentLine, "")
 	if currentIndex != lastIndex {
 		parentLine = append(n.ParentLine, ConnectParenetLine)
-		if n.Depth != 0 {
+		if n.Level != 0 {
 			currentLine = currentLine + ThreeWayLine
 		} else {
 			currentLine = ThreeWayLine
 		}
 	} else {
 		parentLine = append(n.ParentLine, NonConnectParentLine)
-		if n.Depth != 0 {
+		if n.Level != 0 {
 			currentLine = currentLine + RightAngleLine
 		} else {
 			currentLine = RightAngleLine
@@ -111,9 +115,9 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 
 	return Node{
 		Pos{
-			Depth: n.Depth + 1,
-			FileName: filepath.Join(n.FileName, fileName),
-			ParentLine: parentLine,
+			Level:       n.Level + 1,
+			FileName:    filepath.Join(n.FileName, fileName),
+			ParentLine:  parentLine,
 			CurrentLine: currentLine,
 		},
 	}
@@ -148,6 +152,12 @@ func (n Node) IsHiddenFile() bool {
 }
 
 func TreeCommand(c *cli.Context) error {
+	err := Validate(c)
+	if err != nil {
+		fmt.Printf("tree: %v.\n", err)
+		return nil
+	}
+
 	fmt.Println(".")
 
 	rootDir, _ := os.Getwd()
@@ -156,13 +166,13 @@ func TreeCommand(c *cli.Context) error {
 	r := Result{}
 	n := Node{
 		Pos {
-			Depth: 0,
-			FileName: rootDir,
+			Level:      0,
+			FileName:   rootDir,
 			ParentLine: []string{},
 		},
 	}
 
-	r = WalkDir(v, n, r)
+	r = WalkDir(c, v, n, r)
 
 	fmt.Printf("\n%d directories, %d files\n", r.DirNum, r.FileNum)
 	return nil
