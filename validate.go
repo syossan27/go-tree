@@ -3,18 +3,24 @@ package go_tree
 import (
 	"errors"
 	"github.com/urfave/cli"
+	"strconv"
 )
 
 func Validate(c *cli.Context) error {
-	err := validateLevel(c.Int("L"))
+	err := validateLevel(c.String("L"))
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func validateLevel(level int) error {
-	if level <= 0 {
+func validateLevel(levelStr string) error {
+	if levelStr == "" {
+		return nil
+	}
+
+	level, err := strconv.Atoi(levelStr)
+	if err != nil || level <= 0 {
 		return errors.New("invalid level, must be greater than 0")
 	}
 	return nil

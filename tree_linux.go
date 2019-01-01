@@ -60,8 +60,12 @@ func (v visitor) Visit(n Node) Visitor {
 }
 
 func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
-	if n.Level > c.Int("L") {
-		return r
+	levelStr := c.String("L")
+	if levelStr != "" {
+		level, err := strconv.Atoi(levelStr)
+		if err != nil || n.Level > level {
+			return r
+		}
 	}
 
 	if v = v.Visit(n); v == nil {
