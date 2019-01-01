@@ -1,3 +1,5 @@
+// +build darwin
+
 package go_tree
 
 import (
@@ -6,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -21,7 +22,8 @@ type (
 
 	Pos struct {
 		Level       int
-		FileName    string
+		FileName 	string
+		FilePath    string
 		CurrentLine string
 		ParentLine  []string
 	}
@@ -35,24 +37,24 @@ type (
 )
 
 const (
-	ThreeWayLine = "├── "
-	RightAngleLine = "└── "
-	ConnectParenetLine = "│    "
+	ThreeWayLine         = "├── "
+	RightAngleLine       = "└── "
+	ConnectParentLine    = "│    "
 	NonConnectParentLine = "     "
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if n.IsHiddenFile() {
+	if n.IsHidden() {
 		return nil
 	}
 
 	switch n.Type() {
 	case "dir":
 		// TODO: coloring print
-		fmt.Println(n.CurrentLine + filepath.Base(n.FileName))
+		fmt.Println(n.CurrentLine + n.FileName)
 	case "file":
 		// TODO: coloring print
-		fmt.Println(n.CurrentLine + filepath.Base(n.FileName))
+		fmt.Println(n.CurrentLine + n.FileName)
 	}
 	return v
 }
@@ -80,7 +82,7 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 }
 
 func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
-	files, err := ioutil.ReadDir(n.FileName)
+	files, err := ioutil.ReadDir(n.FilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -98,7 +100,7 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 	var parentLine []string
 	currentLine := strings.Join(n.ParentLine, "")
 	if currentIndex != lastIndex {
-		parentLine = append(n.ParentLine, ConnectParenetLine)
+		parentLine = append(n.ParentLine, ConnectParentLine)
 		if n.Level != 0 {
 			currentLine = currentLine + ThreeWayLine
 		} else {
@@ -116,7 +118,8 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 	return Node{
 		Pos{
 			Level:       n.Level + 1,
-			FileName:    filepath.Join(n.FileName, fileName),
+			FileName:    fileName,
+			FilePath:    filepath.Join(n.FilePath, fileName),
 			ParentLine:  parentLine,
 			CurrentLine: currentLine,
 		},
@@ -124,7 +127,7 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 }
 
 func (n Node) Type() string {
-	fileInfo, err := os.Stat(n.FileName)
+	fileInfo, err := os.Stat(n.FilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -136,19 +139,12 @@ func (n Node) Type() string {
 	}
 }
 
-func (n Node) IsHiddenFile() bool {
-	// TODO: Check hidden file in Windows
-	// https://grokbase.com/t/gg/golang-nuts/144va1n8w5/go-nuts-how-do-check-if-file-or-directory-is-hidden-under-windows
-	if runtime.GOOS != "windows" {
-		baseFileName := filepath.Base(n.FileName)
-		if baseFileName[0:1] == "." {
-			return true
-		} else {
-			return false
-		}
+func (n Node) IsHidden() bool {
+	if n.FileName[0:1] == "." {
+		return true
+	} else {
+		return false
 	}
-
-	return false
 }
 
 func TreeCommand(c *cli.Context) error {
@@ -167,7 +163,7 @@ func TreeCommand(c *cli.Context) error {
 	n := Node{
 		Pos {
 			Level:      0,
-			FileName:   rootDir,
+			FilePath:   rootDir,
 			ParentLine: []string{},
 		},
 	}
