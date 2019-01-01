@@ -37,6 +37,8 @@ type (
 const (
 	ThreeWayLine = "├── "
 	RightAngleLine = "└── "
+	ConnectParenetLine = "│    "
+	NonConnectParentLine = "     "
 )
 
 func (v visitor) Visit(n Node) Visitor {
@@ -92,16 +94,16 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 	var parentLine []string
 	currentLine := strings.Join(n.ParentLine, "")
 	if currentIndex != lastIndex {
+		parentLine = append(n.ParentLine, ConnectParenetLine)
 		if n.Depth != 0 {
-			parentLine = append(n.ParentLine, "    │")
-			currentLine = currentLine + "    " + ThreeWayLine
+			currentLine = currentLine + ThreeWayLine
 		} else {
 			currentLine = ThreeWayLine
 		}
 	} else {
+		parentLine = append(n.ParentLine, NonConnectParentLine)
 		if n.Depth != 0 {
-			parentLine = append(n.ParentLine, "    ")
-			currentLine = currentLine + "    " + RightAngleLine
+			currentLine = currentLine + RightAngleLine
 		} else {
 			currentLine = RightAngleLine
 		}
