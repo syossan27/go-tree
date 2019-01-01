@@ -1,4 +1,4 @@
-// +build linux
+// +build darwin linux netbsd openbsd freebsd
 
 package go_tree
 
@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -45,7 +46,7 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if n.IsHidden() {
+	if IsHidden(n.FilePath) {
 		return nil
 	}
 
@@ -87,9 +88,9 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 }
 
 func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
-	files, err := ioutil.ReadDir(n.FilePath)
+	files, err := ReadDirWithoutHiddenFile(n.FilePath)
 	if err != nil {
-		panic(err)
+		return r
 	}
 
 	lastIndex := len(files) - 1
@@ -99,6 +100,35 @@ func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
 	}
 
 	return r
+}
+
+func ReadDirWithoutHiddenFile(filePath string) ([]os.FileInfo, error) {
+	files, err := ioutil.ReadDir(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var withoutHiddenFiles []os.FileInfo
+	for _, file := range files {
+		if !IsHidden(filepath.Join(filePath, file.Name())) {
+			withoutHiddenFiles = append(withoutHiddenFiles, file)
+		}
+	}
+
+	return withoutHiddenFiles, nil
+}
+
+func IsHidden(filePath string) bool {
+	p, e := syscall.UTF16PtrFromString(filePath)
+	if e != nil {
+		return false
+	}
+	attrs, e := syscall.GetFileAttributes(p)
+	if e != nil {
+		return false
+	}
+
+	return attrs & syscall.FILE_ATTRIBUTE_HIDDEN != 0
 }
 
 func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
@@ -142,19 +172,6 @@ func (n Node) Type() string {
 	} else {
 		return "file"
 	}
-}
-
-func (n Node) IsHidden() bool {
-	p, e := syscall.UTF16PtrFromString(n.FilePath)
-	if e != nil {
-		return false
-	}
-	attrs, e := syscall.GetFileAttributes(p)
-	if e != nil {
-		return false
-	}
-
-	return attrs & syscall.FILE_ATTRIBUTE_HIDDEN != 0
 }
 
 func TreeCommand(c *cli.Context) error {
