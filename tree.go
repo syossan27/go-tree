@@ -4,6 +4,7 @@ package go_tree
 
 import (
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/urfave/cli"
 	"io/ioutil"
 	"os"
@@ -51,10 +52,9 @@ func (v visitor) Visit(n Node) Visitor {
 
 	switch n.Type() {
 	case "dir":
-		// TODO: coloring print
-		fmt.Println(n.CurrentLine + n.FileName)
+		fmt.Print(n.CurrentLine)
+		color.Green(n.FileName)
 	case "file":
-		// TODO: coloring print
 		fmt.Println(n.CurrentLine + n.FileName)
 	}
 	return v
