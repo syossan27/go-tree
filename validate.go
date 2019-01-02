@@ -6,8 +6,9 @@ import (
 	"strconv"
 )
 
-func Validate(c *cli.Context) error {
-	err := validateLevel(c.String("L"))
+func ValidateFlag(c *cli.Context) error {
+	var err error
+	err = validateLevel(c.String("L"))
 	if err != nil {
 		return err
 	}

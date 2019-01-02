@@ -153,28 +153,57 @@ func (n Node) IsHidden() bool {
 }
 
 func TreeCommand(c *cli.Context) error {
-	err := Validate(c)
+	err := ValidateFlag(c)
 	if err != nil {
 		fmt.Printf("tree: %v.\n", err)
 		return nil
 	}
 
-	fmt.Println(".")
-
-	rootDir, _ := os.Getwd()
-
-	v := visitor{}
+	dirs := c.Args()
 	r := Result{}
-	n := Node{
-		Pos {
-			Level:      0,
-			FilePath:   rootDir,
-			ParentLine: []string{},
-		},
+	if len(dirs) == 0 {
+		fmt.Println(".")
+
+		rootDir, _ := os.Getwd()
+
+		v := visitor{}
+		n := Node{
+			Pos {
+				Level:      0,
+				FilePath:   rootDir,
+				ParentLine: []string{},
+			},
+		}
+
+		r = WalkDir(c, v, n, r)
+	} else {
+		for _, dir := range dirs {
+			workingDir, _ := os.Getwd()
+			rootDir := filepath.Join(workingDir, dir)
+
+			// validate specify dir
+			fileInfo, err := os.Stat(rootDir)
+			if  err != nil || !fileInfo.IsDir() {
+				fmt.Printf("%s [error opening dir]\n", dir)
+				continue
+			}
+
+			fmt.Println(dir)
+
+			v := visitor{}
+			n := Node{
+				Pos {
+					Level:      0,
+					FilePath:   rootDir,
+					ParentLine: []string{},
+				},
+			}
+
+			r = WalkDir(c, v, n, r)
+		}
 	}
 
-	r = WalkDir(c, v, n, r)
-
 	fmt.Printf("\n%d directories, %d files\n", r.DirNum, r.FileNum)
+
 	return nil
 }
