@@ -15,6 +15,10 @@ func makeApp() *cli.App {
 	app.Version = "0.1.1"
 	app.Action = go_tree.TreeCommand
 	app.Flags = []cli.Flag {
+		cli.BoolFlag{
+			Name: "a",
+			Usage: "All files are listed.",
+		},
 		cli.StringFlag{
 			Name: "L",
 			Usage: "Descend only level directories deep.",

@@ -35,7 +35,9 @@ type (
 		FileNum int64
 	}
 
-	visitor struct {}
+	visitor struct {
+		HiddenFlag bool
+	}
 )
 
 const (
@@ -46,7 +48,7 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if n.IsHidden() {
+	if !v.HiddenFlag && n.IsHidden() {
 		return nil
 	}
 
@@ -162,11 +164,14 @@ func TreeCommand(c *cli.Context) error {
 	dirs := c.Args()
 	r := Result{}
 	if len(dirs) == 0 {
+		// Not specify dirs
 		fmt.Println(".")
 
 		rootDir, _ := os.Getwd()
 
-		v := visitor{}
+		v := visitor{
+			HiddenFlag: c.Bool("a"),
+		}
 		n := Node{
 			Pos {
 				Level:      0,
@@ -177,6 +182,7 @@ func TreeCommand(c *cli.Context) error {
 
 		r = WalkDir(c, v, n, r)
 	} else {
+		// Specify dirs
 		for _, dir := range dirs {
 			workingDir, _ := os.Getwd()
 			rootDir := filepath.Join(workingDir, dir)
@@ -190,7 +196,9 @@ func TreeCommand(c *cli.Context) error {
 
 			fmt.Println(dir)
 
-			v := visitor{}
+			v := visitor{
+				HiddenFlag: c.Bool("a"),
+			}
 			n := Node{
 				Pos {
 					Level:      0,
