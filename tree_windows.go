@@ -35,7 +35,9 @@ type (
 		FileNum int64
 	}
 
-	visitor struct {}
+	visitor struct {
+		HiddenFlag bool
+	}
 )
 
 const (
@@ -46,20 +48,20 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if IsHidden(n.FilePath) {
+	if !v.HiddenFlag && n.IsHidden() {
 		return nil
 	}
 
 	switch n.Type() {
 	case "dir":
-		// TODO: coloring print
-		fmt.Println(n.CurrentLine + n.FileName)
+		fmt.Print(n.CurrentLine)
+		color.Green(n.FileName)
 	case "file":
-		// TODO: coloring print
 		fmt.Println(n.CurrentLine + n.FileName)
 	}
 	return v
 }
+
 
 func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 	levelStr := c.String("L")
@@ -175,28 +177,64 @@ func (n Node) Type() string {
 }
 
 func TreeCommand(c *cli.Context) error {
-	err := Validate(c)
+	err := ValidateFlag(c)
 	if err != nil {
 		fmt.Printf("tree: %v.\n", err)
 		return nil
 	}
 
-	fmt.Println(".")
-
-	rootDir, _ := os.Getwd()
-
-	v := visitor{}
+	dirs := c.Args()
 	r := Result{}
-	n := Node{
-		Pos {
-			Level:      0,
-			FilePath:   rootDir,
-			ParentLine: []string{},
-		},
+	if len(dirs) == 0 {
+		// Not specify dirs
+		fmt.Println(".")
+
+		rootDir, _ := os.Getwd()
+
+		v := visitor{
+			HiddenFlag: c.Bool("a"),
+		}
+		n := Node{
+			Pos {
+				Level:      0,
+				FilePath:   rootDir,
+				ParentLine: []string{},
+			},
+		}
+
+		r = WalkDir(c, v, n, r)
+	} else {
+		// Specify dirs
+		for _, dir := range dirs {
+			workingDir, _ := os.Getwd()
+			rootDir := filepath.Join(workingDir, dir)
+
+			// validate specify dir
+			fileInfo, err := os.Stat(rootDir)
+			if  err != nil || !fileInfo.IsDir() {
+				fmt.Printf("%s [error opening dir]\n", dir)
+				continue
+			}
+
+			fmt.Println(dir)
+
+			v := visitor{
+				HiddenFlag: c.Bool("a"),
+			}
+			n := Node{
+				Pos {
+					Level:      0,
+					FilePath:   rootDir,
+					ParentLine: []string{},
+				},
+			}
+
+			r = WalkDir(c, v, n, r)
+		}
 	}
 
-	r = WalkDir(c, v, n, r)
-
 	fmt.Printf("\n%d directories, %d files\n", r.DirNum, r.FileNum)
+
 	return nil
 }
+
