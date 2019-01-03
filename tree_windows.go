@@ -36,9 +36,7 @@ type (
 		FileNum int64
 	}
 
-	visitor struct {
-		HiddenFlag bool
-	}
+	visitor struct {}
 )
 
 const (
@@ -49,10 +47,6 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if !v.HiddenFlag && IsHidden(n.FilePath) {
-		return nil
-	}
-
 	switch n.Type() {
 	case "dir":
 		fmt.Print(n.CurrentLine)
@@ -90,13 +84,7 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 }
 
 func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
-	var err error
-	var files []os.FileInfo
-	if c.Bool("a") {
-		files, err = ReadDirWithoutHiddenFile(n.FilePath)
-	} else {
-		files, err = ioutil.ReadDir(n.FilePath)
-	}
+	files, err := ReadDir(c, n.FilePath)
 	if err != nil {
 		return r
 	}
@@ -110,20 +98,40 @@ func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
 	return r
 }
 
-func ReadDirWithoutHiddenFile(filePath string) ([]os.FileInfo, error) {
+func ReadDir(c *cli.Context, filePath string) ([]os.FileInfo, error) {
 	files, err := ioutil.ReadDir(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	var withoutHiddenFiles []os.FileInfo
-	for _, file := range files {
-		if !IsHidden(filepath.Join(filePath, file.Name())) {
-			withoutHiddenFiles = append(withoutHiddenFiles, file)
-		}
+	if c.Bool("a") {
+		files = exceptHiddenFile(files, filePath)
+	}
+	if c.Bool("d") {
+		files = exceptFile(files, filePath)
 	}
 
-	return withoutHiddenFiles, nil
+	return files, err
+}
+
+func exceptHiddenFile(files []os.FileInfo, filePath string) []os.FileInfo {
+	var newFiles []os.FileInfo
+	for _, file := range files {
+		if !IsHidden(filepath.Join(filePath, file.Name())) {
+			newFiles = append(newFiles, file)
+		}
+	}
+	return newFiles
+}
+
+func exceptFile(files []os.FileInfo, filePath string) []os.FileInfo {
+	var newFiles []os.FileInfo
+	for _, file := range files {
+		if !file.IsDir() {
+			newFiles = append(newFiles, file)
+		}
+	}
+	return newFiles
 }
 
 func IsHidden(filePath string) bool {
@@ -197,9 +205,7 @@ func TreeCommand(c *cli.Context) error {
 
 		rootDir, _ := os.Getwd()
 
-		v := visitor{
-			HiddenFlag: c.Bool("a"),
-		}
+		v := visitor{}
 		n := Node{
 			Pos {
 				Level:      0,
@@ -224,9 +230,7 @@ func TreeCommand(c *cli.Context) error {
 
 			fmt.Println(dir)
 
-			v := visitor{
-				HiddenFlag: c.Bool("a"),
-			}
+			v := visitor{}
 			n := Node{
 				Pos {
 					Level:      0,
