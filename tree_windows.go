@@ -4,6 +4,7 @@ package go_tree
 
 import (
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/urfave/cli"
 	"io/ioutil"
 	"os"
@@ -48,7 +49,7 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if !v.HiddenFlag && n.IsHidden() {
+	if !v.HiddenFlag && IsHidden(n.FilePath) {
 		return nil
 	}
 
@@ -61,7 +62,6 @@ func (v visitor) Visit(n Node) Visitor {
 	}
 	return v
 }
-
 
 func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 	levelStr := c.String("L")
@@ -90,7 +90,13 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 }
 
 func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
-	files, err := ReadDirWithoutHiddenFile(n.FilePath)
+	var err error
+	var files []os.FileInfo
+	if c.Bool("a") {
+		files, err = ReadDirWithoutHiddenFile(n.FilePath)
+	} else {
+		files, err = ioutil.ReadDir(n.FilePath)
+	}
 	if err != nil {
 		return r
 	}
