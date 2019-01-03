@@ -19,6 +19,10 @@ func makeApp() *cli.App {
 			Name: "a",
 			Usage: "All files are listed.",
 		},
+		cli.BoolFlag{
+			Name: "d",
+			Usage: "List directories only.",
+		},
 		cli.StringFlag{
 			Name: "L",
 			Usage: "Descend only level directories deep.",

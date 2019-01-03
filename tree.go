@@ -35,9 +35,7 @@ type (
 		FileNum int64
 	}
 
-	visitor struct {
-		HiddenFlag bool
-	}
+	visitor struct {}
 )
 
 const (
@@ -48,10 +46,6 @@ const (
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	if !v.HiddenFlag && n.IsHidden() {
-		return nil
-	}
-
 	switch n.Type() {
 	case "dir":
 		fmt.Print(n.CurrentLine)
@@ -89,9 +83,9 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 }
 
 func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
-	files, err := ioutil.ReadDir(n.FilePath)
+	files, err := ReadDir(c, n.FilePath)
 	if err != nil {
-		panic(err)
+		return r
 	}
 
 	lastIndex := len(files) - 1
@@ -101,6 +95,42 @@ func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
 	}
 
 	return r
+}
+
+func ReadDir(c *cli.Context, filePath string) ([]os.FileInfo, error) {
+	files, err := ioutil.ReadDir(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if !c.Bool("a") {
+		files = exceptHiddenFile(files)
+	}
+	if c.Bool("d") {
+		files = exceptFile(files)
+	}
+
+	return files, nil
+}
+
+func exceptHiddenFile(files []os.FileInfo) []os.FileInfo {
+	var newFiles []os.FileInfo
+	for _, file := range files {
+		if !IsHidden(file.Name()) {
+			newFiles = append(newFiles, file)
+		}
+	}
+	return newFiles
+}
+
+func exceptFile(files []os.FileInfo) []os.FileInfo {
+	var newFiles []os.FileInfo
+	for _, file := range files {
+		if file.IsDir() {
+			newFiles = append(newFiles, file)
+		}
+	}
+	return newFiles
 }
 
 func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
@@ -146,8 +176,8 @@ func (n Node) Type() string {
 	}
 }
 
-func (n Node) IsHidden() bool {
-	if n.FileName[0:1] == "." {
+func IsHidden(fileName string) bool {
+	if fileName[0:1] == "." {
 		return true
 	} else {
 		return false
@@ -169,9 +199,7 @@ func TreeCommand(c *cli.Context) error {
 
 		rootDir, _ := os.Getwd()
 
-		v := visitor{
-			HiddenFlag: c.Bool("a"),
-		}
+		v := visitor{}
 		n := Node{
 			Pos {
 				Level:      0,
@@ -196,9 +224,7 @@ func TreeCommand(c *cli.Context) error {
 
 			fmt.Println(dir)
 
-			v := visitor{
-				HiddenFlag: c.Bool("a"),
-			}
+			v := visitor{}
 			n := Node{
 				Pos {
 					Level:      0,
