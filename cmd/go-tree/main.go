@@ -23,6 +23,10 @@ func makeApp() *cli.App {
 			Name: "d",
 			Usage: "List directories only.",
 		},
+		cli.BoolFlag{
+			Name: "l",
+			Usage: "Follow symbolic links like directories.",
+		},
 		cli.StringFlag{
 			Name: "L",
 			Usage: "Descend only level directories deep.",
