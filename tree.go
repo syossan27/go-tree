@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type (
@@ -33,30 +34,77 @@ type (
 	Result struct {
 		DirNum int64
 		FileNum int64
+		INodeRecords []INodeRecord
 	}
 
-	visitor struct {}
+	visitor struct {
+	}
+
+	INodeRecord struct {
+		INode uint64
+		Device int32
+	}
 )
 
 const (
 	ThreeWayLine         = "├── "
 	RightAngleLine       = "└── "
-	ConnectParentLine    = "│    "
-	NonConnectParentLine = "     "
+	ConnectParentLine    = "│   "
+	NonConnectParentLine = "    "
 )
 
 func (v visitor) Visit(n Node) Visitor {
-	switch n.Type() {
+	switch NodeType(n.FilePath) {
 	case "dir":
 		fmt.Print(n.CurrentLine)
-		color.Green(n.FileName)
+		c := color.New(color.FgGreen)
+		c.Println(n.FileName)
 	case "file":
 		fmt.Println(n.CurrentLine + n.FileName)
+	case "symlink":
+		fmt.Print(n.CurrentLine)
+		c := color.New(color.FgMagenta)
+		c.Print(n.FileName)
+		fmt.Print(" -> ")
+		PrintSymlinkRealPath(n.FilePath)
 	}
 	return v
 }
 
+func GetINodeRecord(filePath string) (INodeRecord, bool) {
+	var ir INodeRecord
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return ir, false
+	}
+
+	// TODO: windows
+	stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return ir, false
+	}
+	ir.INode = stat.Ino
+	ir.Device = stat.Dev
+
+	return ir, true
+}
+
+func (r *Result) saveINode(ir INodeRecord) {
+	r.INodeRecords = append(r.INodeRecords, ir)
+}
+
+func (r Result) searchINode(ir INodeRecord) bool {
+	for _, iNodeRecord := range r.INodeRecords {
+		if iNodeRecord.INode == ir.INode &&
+			iNodeRecord.Device == ir.Device {
+			return true
+		}
+	}
+	return false
+}
+
 func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
+	// if set L option, stop walk on specify level
 	levelStr := c.String("L")
 	if levelStr != "" {
 		level, err := strconv.Atoi(levelStr)
@@ -69,14 +117,42 @@ func Walk(c *cli.Context, v Visitor, n Node, r Result) Result {
 		return r
 	}
 
-	switch n.Type() {
+	switch NodeType(n.FilePath) {
+	case "symlink":
+		// Plan: symlinkだった時に参照先のパスにnodeのFilePathを上書きして、再度Walk
+
+		// Check symlink linked node type
+		realPath, err := os.Readlink(n.FilePath)
+		if err != nil {
+			break
+		}
+		switch finalDestinationNodeType(realPath) {
+		case "dir":
+			r.DirNum++
+
+			// if set l option, recursive symlink
+			if !c.Bool("l") {
+				fmt.Println("")
+			} else {
+				iNodeRecord, ok := GetINodeRecord(n.FilePath)
+				if ok && r.searchINode(iNodeRecord) {
+					fmt.Println("  [recursive, not followed]")
+					return r
+				} else {
+					fmt.Println("")
+				}
+				r.saveINode(iNodeRecord)
+
+				r = WalkDir(c, v, n, r)
+			}
+		case "file":
+			r.FileNum++
+		}
 	case "dir":
-		r = WalkDir(c, v, n, r)
 		r.DirNum++
-		return r
+		r = WalkDir(c, v, n, r)
 	case "file":
 		r.FileNum++
-		return r
 	}
 
 	return r
@@ -97,8 +173,8 @@ func WalkDir(c *cli.Context, v Visitor, n Node, r Result) Result {
 	return r
 }
 
-func ReadDir(c *cli.Context, filePath string) ([]os.FileInfo, error) {
-	files, err := ioutil.ReadDir(filePath)
+func ReadDir(c *cli.Context, dirPath string) ([]os.FileInfo, error) {
+	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +183,7 @@ func ReadDir(c *cli.Context, filePath string) ([]os.FileInfo, error) {
 		files = exceptHiddenFile(files)
 	}
 	if c.Bool("d") {
-		files = exceptFile(files)
+		files = exceptFile(dirPath, files)
 	}
 
 	return files, nil
@@ -123,10 +199,10 @@ func exceptHiddenFile(files []os.FileInfo) []os.FileInfo {
 	return newFiles
 }
 
-func exceptFile(files []os.FileInfo) []os.FileInfo {
+func exceptFile(dirPath string, files []os.FileInfo) []os.FileInfo {
 	var newFiles []os.FileInfo
 	for _, file := range files {
-		if file.IsDir() {
+		if file.IsDir() || IsDirLinkedSymlink(dirPath, file) {
 			newFiles = append(newFiles, file)
 		}
 	}
@@ -163,16 +239,75 @@ func (n Node) NextNode(currentIndex, lastIndex int, fileName string) Node {
 	}
 }
 
-func (n Node) Type() string {
-	fileInfo, err := os.Stat(n.FilePath)
+func NodeType(filePath string) string {
+	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		panic(err)
+	}
+
+	if IsSymlinkByFilePath(filePath) {
+		return "symlink"
 	}
 
 	if fileInfo.IsDir() {
 		return "dir"
 	} else {
 		return "file"
+	}
+}
+
+func finalDestinationNodeType(realPath string) string {
+	var err error
+	loop: switch NodeType(realPath) {
+	case "dir":
+		return "dir"
+	case "file":
+		return "file"
+	case "symlink":
+		realPath, err = os.Readlink(realPath)
+		if err != nil {
+			panic(err)
+		}
+		goto loop
+	}
+	return ""
+}
+
+func IsSymlinkByFilePath(filePath string) bool {
+	fileInfo, err := os.Lstat(filePath)
+	if err != nil {
+		panic(err)
+	}
+
+	if fileInfo.Mode()&os.ModeSymlink == os.ModeSymlink {
+		return true
+	} else {
+		return false
+	}
+}
+
+func IsDirLinkedSymlink(dirPath string, fileInfo os.FileInfo) bool {
+	symlinkInfo, err := os.Stat(filepath.Join(dirPath, fileInfo.Name()))
+	if err != nil {}
+	if symlinkInfo.IsDir() {
+		return true
+	} else {
+		return false
+	}
+}
+
+func PrintSymlinkRealPath(filePath string) {
+	realPath, err := os.Readlink(filePath)
+	if err != nil {
+		panic(err)
+	}
+
+	switch finalDestinationNodeType(realPath) {
+	case "dir":
+		c := color.New(color.FgGreen)
+		c.Print(realPath)
+	case "file":
+		fmt.Println(realPath)
 	}
 }
 
